@@ -1,4 +1,4 @@
-![preview](https://imgur.com/EQm8loa)
+![Program preview](https://imgur.com/EQm8loa.jpg)
 
 # CmdMandelbrot
 Plot the Mandelbrot Set only with your command line! (And a bit of python)
