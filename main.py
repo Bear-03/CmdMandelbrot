@@ -5,7 +5,7 @@ import numpy as np
 from pynput.keyboard import Key, Listener
 from colorama import init, Back, Style
 
-from util import remap, CriticalPoints, Vector, Screen
+from util import map_to_colour, MaxAndMin, Vector, Screen
 
 
 def clear():
@@ -18,17 +18,19 @@ clear()
 width, height = os.get_terminal_size()
 screen = Screen(width, height - 1, 30, 30, 5)
 
-iterations = 100 # iterations to perform until it is decided if z belongs to the set
-threshold = 10  # iters for pixel to count as colour
-cursor = False # shows a black square in the middle of the console, useful for zooming
-colour_modulo = 10 # when to repeat the colours
-colours = [Back.CYAN, Back.BLUE, Back.MAGENTA, Back.GREEN, Back.YELLOW, Back.RED]
+iterations = 100  # iterations to perform until it is decided if z belongs to the set
+threshold = 10  # iterations for pixel not in the set to be coloured
+cursor = True  # shows a black square in the middle of the console, useful for zooming
+colour_modulo = 10  # controls how often colours are repeated
+cursor_colour = Back.BLACK
+clear_on_exit = True
+colours = (Back.CYAN, Back.BLUE, Back.MAGENTA, Back.GREEN, Back.YELLOW, Back.RED)
 
 
 def calculate():
     # python lists are needed because the list will contain both numbers and strings later on
     output = np.full((screen.width, screen.height), " ").tolist()
-    critical_points = CriticalPoints()
+    index_max_and_min = MaxAndMin()
 
     for y in range(screen.height):
         for x in range(screen.width):
@@ -43,47 +45,52 @@ def calculate():
                         i_modulo = i % colour_modulo
                         output[x][y] = i_modulo
 
-                        if i_modulo > critical_points.max:
-                            critical_points.max = i_modulo
-                        if i_modulo < critical_points.min:
-                            critical_points.min = i_modulo
+                        # MaxAndMin will store the boundaries so they can then be mapped to the colour array
+                        if i_modulo > index_max_and_min.max:
+                            index_max_and_min.max = i_modulo
+                        if i_modulo < index_max_and_min.min:
+                            index_max_and_min.min = i_modulo
                     break
             else:
                 output[x][y] = Back.WHITE + " "
 
-    return output, critical_points
+    return output, index_max_and_min
 
 
 # Also removes repeated colour codes to optimize printing
-def generate_string(output, critical_points):
+def generate_string(output, index_max_and_min):
     string = ""
     last_char = " "
     for y in range(screen.height):
         for x in range(screen.width):
+            # Draw cursor
             if cursor and x == screen.width // 2 and y == screen.height // 2:
-                output[x][y] = Back.BLACK + " "
+                output[x][y] = cursor_colour + " "
 
+            # The pixel doesn't belong to the set but it was close
             if isinstance(output[x][y], int):
-                colour_index = remap(output[x][y], critical_points.min, critical_points.max, 0, len(colours) - 1)
-                output[x][y] = colours[colour_index] + " "
+                output[x][y] = map_to_colour(output[x][y], index_max_and_min, colours) + " "
 
-            original_char = output[x][y]
+            current_char = output[x][y]
 
+            # Removes repeated colour codes so it is printed faster
+            # The colour code will be removed if the pixel before had the same colour
             if last_char != " ":
-                if last_char == original_char:
+                if last_char == current_char:
                     output[x][y] = " "
-                elif original_char == " ":
+                elif current_char == " ":
+                    # Transparent pixel
                     output[x][y] = Back.RESET + " "
 
             string += output[x][y]
-            last_char = original_char
+            last_char = current_char
 
     return Style.DIM + string + Style.RESET_ALL
 
 
 def render():
     string = generate_string(*calculate())
-    sys.stdout.write(string)
+    print(string)
 
 
 render()
@@ -101,18 +108,20 @@ def on_press(key):
         Key.f2: screen.zoom_sensitivity,
         Key.esc: None
     }
-    keys = tuple(actions.keys())
-
-    if key not in keys:
+    try:
+        action = actions[key]
+    except KeyError:
         return
 
-    if key in keys[:4]:
-        screen.offset += actions[key] * screen.mov_sensitivity
-    elif key in keys[4:6]:
-        screen.zoom *= actions[key]
+    if isinstance(action, Vector):
+        screen.offset += action * screen.mov_sensitivity
+    elif isinstance(action, (float, int)):
+        screen.zoom *= action
         if screen.zoom <= 0:
             screen.zoom = 0.1
     else:
+        if clear_on_exit:
+            clear()
         sys.exit()
 
     clear()
