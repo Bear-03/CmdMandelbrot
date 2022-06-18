@@ -6,7 +6,7 @@ from typing import Union
 @dataclass
 class MaxAndMin:
     """
-    Stores the maximum and minimum number of iterations tha will get a colour
+    Stores the maximum and minimum number of iterations needed to get a colour
     """
     min: int = 0
     max: int = 0
